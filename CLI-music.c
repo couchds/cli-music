@@ -10,15 +10,17 @@
  * */
 
 /* Note: Database format is:
+ *          
+ *          +------------+--------------+------+-----+---------+-------+
+ *          | Field      | Type         | Null | Key | Default | Extra |
+ *          +------------+--------------+------+-----+---------+-------+
+ *          | id         | int(11)      | YES  |     | NULL    |       |
+ *          | path       | varchar(500) | YES  |     | NULL    |       |
+ *          | song_name  | varchar(500) | NO   | PRI | NULL    |       |
+ *          | artist     | varchar(500) | NO   | PRI | NULL    |       |
+ *          | view_count | int(11)      | YES  |     | 0       |       |
+ *          +------------+--------------+------+-----+---------+-------+
  *
- *          +-----------+--------------+------+-----+---------+-------+
- *          | Field     | Type         | Null | Key | Default | Extra |
- *          +-----------+--------------+------+-----+---------+-------+
- *          | id        | int(11)      | YES  |     | NULL    |       |
- *          | path      | varchar(500) | YES  |     | NULL    |       |
- *          | song_name | varchar(500) | YES  | PRI | NULL    |       |
- *          | artist    | varchar(500) | YES  | PRI | NULL    |       |
- *          +-----------+--------------+------+-----+---------+-------+
  * Where id is the # of the recorded song, and path is the absolute
  * path to the directory where the mp3 file is stored.
  *  
@@ -73,6 +75,9 @@ int song_menu(MYSQL *db_connection);
 void finish_with_error(MYSQL *db_connection, int errnum);
 char *get_song_name(MYSQL *db_connection, int id);
 void free_memory(ITEM **items, MENU *menu_ptr, int num_items);
+void update_view_count(MYSQL *db_connection, char *file_path);
+
+
 
 const char *usage = "usage: mus username hostname password\n";
 
@@ -141,13 +146,14 @@ struct song_info get_file_info(const char *file_name)
     /* Returns pointer to first occurence of delimiter,
      * where the artist name ends. */
     char *part2 = strstr(file_name, delimiter);
-    /* +1 for null-terminated string */
-    char buff[file_name_length-strlen(part2)+1];
-    /* Everything from file_name to part2 is the artist name 
-     * strncpy pads with 0x00 */
-    strncpy(buff, file_name, file_name_length-strlen(part2));
-    strcpy(fdata.artist, buff);
-    strncpy(fdata.artist, file_name, file_name_length - strlen(part2));
+    /* Buffer for artist name */
+    int artist_length = file_name_length - strlen(part2);
+    char buff[artist_length];
+    /* Everything from file_name to part2 is the artist name */
+    strncpy(buff, file_name, artist_length);
+    /* Null terminate */
+    buff[artist_length] = 0x00;
+    strncpy(fdata.artist, buff, artist_length); 
     /* strlen(" .  .mp3") = 7 */
     char buff2[1024];
     memcpy(buff2, &part2[3], strlen(part2-7));
@@ -335,6 +341,19 @@ void kill_proc(int pid)
     clrtoeol();
 }
 
+
+
+/* Function update_view_count
+ *  Increment view_count of song in database
+ *  */
+void update_view_count(MYSQL *db_connection, char *file_path)
+{
+    char query[1024];
+    printf("HERE\n");
+    sprintf(query, "UPDATE Songs SET view_count = view_count + 1 WHERE path = %s", file_path);
+    mysql_query(db_connection, query);
+}
+
 /* Function song_menu
  *  Display songs in database
  *  Get input on which song to play
@@ -434,6 +453,7 @@ int song_menu(MYSQL *db_connection)
                                 "mpg123", \
                                 song_menu_file_paths[selected_item],
                                 (char *) 0); // sentinel value - end of parameter list
+                        update_view_count(db_connection, song_menu_file_paths[selected_item]);
                         /* Exit when done playing song (unless it's signalled to die)*/
                         exit(1);
 
